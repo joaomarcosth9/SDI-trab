@@ -17,10 +17,10 @@ BULLY_TIMEOUT   = 5        # Timeout para aguardar resposta na eleição (segund
 ROUND_START     = 0        # Round inicial do sistema
 
 # Timeouts do protocolo de consenso
-CONSENSUS_INTERVAL = 15       # Intervalo entre rodadas de consenso (segundos)
-ROUND_QUERY_TIMEOUT = 6       # Timeout para aguardar respostas de round (segundos)
-VALUE_PROCESS_DELAY = 2       # Delay para processar valores recebidos (segundos)
-RESPONSE_PROCESS_DELAY = 2    # Delay para processar respostas recebidas (segundos)
-LEADER_QUERY_DELAY = 3        # Delay para consultar round após virar líder (segundos)
-LEADER_CONSENSUS_DELAY = 3    # Delay para iniciar consenso após consultar round (segundos)
+CONSENSUS_INTERVAL = 3       # tempo entre rodadas de consenso
+ROUND_QUERY_TIMEOUT = 2       # tempo para aguardar respostas de round
+VALUE_PROCESS_DELAY = 0.5       # delay para processar valores recebidos
+RESPONSE_PROCESS_DELAY = 0.5       # delay para processar respostas recebidas
+LEADER_QUERY_DELAY = 1       # delay para consultar round após virar líder
+LEADER_CONSENSUS_DELAY = 1       # delay para iniciar consenso após consultar round
 

@@ -11,7 +11,7 @@ from time import monotonic, sleep
 from random import randint
 from collections import defaultdict
 from .config import *
-from .communication import create_socket, send
+from .communication import NetworkManager
 from .message import pack, unpack
 from .failure_detection import start_heartbeat, start_monitor
 from .election import bully
@@ -29,7 +29,7 @@ class Node:
     Attributes:
         pid (int): ID único do processo
         total (int): Número total de processos no sistema
-        sock (socket): Socket UDP para comunicação multicast
+        network (NetworkManager): Gerenciador de rede com reconexão automática
         round (int): Round atual do protocolo de consenso
         leader (int): PID do líder atual (None se não há líder)
         alive (dict): Mapeamento PID -> timestamp dos processos vivos
@@ -51,7 +51,7 @@ class Node:
         """
         self.pid        = pid
         self.total      = total
-        self.sock       = create_socket()
+        self.network    = NetworkManager()
         self.round      = ROUND_START
         self.leader     = None     # pid
         self.alive      = {pid: monotonic()}
@@ -95,7 +95,7 @@ class Node:
     # network
     def send(self, op: str, **kv):
         """
-        Envia uma mensagem via multicast.
+        Envia uma mensagem via multicast usando o NetworkManager.
         
         Args:
             op (str): Tipo da operação/mensagem
@@ -104,7 +104,10 @@ class Node:
         if op in ["OK", "ELECTION", "LEADER"]:
             recipient = kv.get("to", "ALL")
             self.log(f"Enviando {op} para {recipient}", "📤", "purple")
-        send(self.sock, pack(op, **kv))
+        
+        success = self.network.send(pack(op, **kv))
+        if not success:
+            self.log(f"Falha ao enviar {op} - rede indisponível", "❌", "red")
 
     def get_alive_pids(self):
         """
@@ -271,6 +274,7 @@ class Node:
         
         Reseta flags de eleição e chama o algoritmo bully.
         """
+        self.leader = None
         self.log("Iniciando processo de eleição", "🗳️", "red")
         self.received_ok = False
         bully(self)
@@ -446,8 +450,13 @@ class Node:
         em thread separada.
         """
         while True:
-            data, _ = self.sock.recvfrom(65535)
-            self.handle(data)
+            result = self.network.receive(65535)
+            if result is not None:
+                data, _ = result
+                self.handle(data)
+            else:
+                # Pequena pausa quando não há dados ou erro de rede
+                sleep(0.1)
 
 def main():
     """

@@ -7,7 +7,6 @@ falhas por timeout e iniciar eleições quando necessário.
 
 from time import monotonic, sleep
 from threading import Thread
-from .communication import send
 from .message import pack
 from .config import HEARTBEAT_INT, FAIL_TIMEOUT
 
@@ -28,7 +27,9 @@ def start_heartbeat(node):
     """
     def pulse():
         while True:
-            send(node.sock, pack("HB", pid=node.pid))
+            success = node.network.send(pack("HB", pid=node.pid))
+            if not success:
+                node.log("Falha ao enviar heartbeat - rede indisponível", "💔", "red")
             sleep(HEARTBEAT_INT)
 
     Thread(target=pulse, daemon=True).start()
