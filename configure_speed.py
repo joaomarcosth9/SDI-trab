@@ -76,7 +76,15 @@ def update_config(speed):
     return True
 
 def get_description(key):
-    """Retorna descrição do parâmetro"""
+    """
+    Retorna descrição do parâmetro de configuração.
+    
+    Args:
+        key (str): Nome do parâmetro de configuração
+        
+    Returns:
+        str: Descrição do parâmetro ou string vazia se não encontrado
+    """
     descriptions = {
         "CONSENSUS_INTERVAL": "tempo entre rodadas de consenso",
         "ROUND_QUERY_TIMEOUT": "tempo para aguardar respostas de round",
@@ -88,6 +96,16 @@ def get_description(key):
     return descriptions.get(key, "")
 
 def main():
+    """
+    Função principal do script de configuração.
+    
+    Processa argumentos da linha de comando e executa a configuração
+    de velocidade do sistema ou mostra as configurações disponíveis.
+    
+    Args (linha de comando):
+        --speed: Velocidade do sistema ('slow', 'normal', 'fast')
+        --show: Mostra configurações disponíveis sem alterar arquivos
+    """
     parser = argparse.ArgumentParser(description="Ajusta velocidade do sistema de consenso")
     parser.add_argument("--speed", choices=["slow", "normal", "fast"], required=True,
                        help="Velocidade do sistema")

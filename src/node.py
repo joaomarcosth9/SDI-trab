@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+"""
+Módulo principal do sistema distribuído de consenso.
+
+Implementa a classe Node que representa um processo no sistema distribuído,
+incluindo algoritmo de eleição Bully, protocolo de consenso e detecção de falhas.
+"""
+
 import argparse, threading
 from time import monotonic, sleep
 from random import randint
@@ -10,7 +17,38 @@ from .failure_detection import start_heartbeat, start_monitor
 from .election import bully
 
 class Node:
+    """
+    Representa um processo no sistema distribuído de consenso.
+    
+    Esta classe implementa um nó que participa de:
+    - Algoritmo de eleição Bully para escolher líder
+    - Protocolo de consenso para decisões por maioria
+    - Detecção de falhas via heartbeat
+    - Comunicação multicast para coordenação
+    
+    Attributes:
+        pid (int): ID único do processo
+        total (int): Número total de processos no sistema
+        sock (socket): Socket UDP para comunicação multicast
+        round (int): Round atual do protocolo de consenso
+        leader (int): PID do líder atual (None se não há líder)
+        alive (dict): Mapeamento PID -> timestamp dos processos vivos
+        received_ok (bool): Flag indicando se recebeu OK na eleição
+        values_received (dict): Valores recebidos por round
+        responses_received (dict): Respostas recebidas por round
+        round_responses (dict): Respostas de consulta de round
+        consensus_in_progress (bool): Flag indicando consenso em andamento
+        round_query_in_progress (bool): Flag indicando consulta de round
+    """
+    
     def __init__(self, pid: int, total: int):
+        """
+        Inicializa um novo nó do sistema distribuído.
+        
+        Args:
+            pid (int): ID único do processo (deve ser positivo)
+            total (int): Número total de processos no sistema
+        """
         self.pid        = pid
         self.total      = total
         self.sock       = create_socket()
@@ -28,6 +66,14 @@ class Node:
 
     # util
     def log(self, msg: str, emoji: str = "ℹ️", color: str = ""):
+        """
+        Exibe mensagem de log colorida com emoji para o processo.
+        
+        Args:
+            msg (str): Mensagem a ser exibida
+            emoji (str): Emoji para prefixar a mensagem
+            color (str): Cor do texto ('red', 'green', 'yellow', 'blue', etc.)
+        """
         colors = {
             "red": "\033[91m",
             "green": "\033[92m",
@@ -48,22 +94,44 @@ class Node:
 
     # network
     def send(self, op: str, **kv):
+        """
+        Envia uma mensagem via multicast.
+        
+        Args:
+            op (str): Tipo da operação/mensagem
+            **kv: Campos adicionais da mensagem
+        """
         if op in ["OK", "ELECTION", "LEADER"]:
             recipient = kv.get("to", "ALL")
             self.log(f"Enviando {op} para {recipient}", "📤", "purple")
         send(self.sock, pack(op, **kv))
 
     def get_alive_pids(self):
-        """Retorna lista de PIDs vivos (excluindo o próprio)"""
+        """
+        Retorna lista de PIDs vivos (excluindo o próprio).
+        
+        Returns:
+            list[int]: Lista de PIDs dos processos vivos
+        """
         return [pid for pid in self.alive.keys() if pid != self.pid]
 
     def calculate_current_value(self):
-        """Calcula o valor atual do processo"""
+        """
+        Calcula o valor atual do processo para o consenso.
+        
+        Returns:
+            int: Valor calculado (função do PID e número aleatório)
+        """
         i = randint(1, 10)
         return i * i * self.pid
 
     def start_consensus_round(self):
-        """Inicia uma rodada de consenso (chamado pelo líder)"""
+        """
+        Inicia uma rodada de consenso (chamado pelo líder).
+        
+        O líder envia sinal START_CONSENSUS para todos os processos
+        calcularem e enviarem seus valores.
+        """
         if self.pid != self.leader:
             return
             
@@ -76,7 +144,12 @@ class Node:
         self.send("START_CONSENSUS", round=self.round)
 
     def process_maximum_value(self):
-        """Processa valores recebidos e calcula resposta"""
+        """
+        Processa valores recebidos e calcula resposta.
+        
+        Verifica se recebeu valores de todos os processos vivos,
+        calcula o máximo e envia resposta para o líder.
+        """
         if self.round not in self.values_received:
             return
             
@@ -98,7 +171,12 @@ class Node:
         self.send("RESPONSE", pid=self.pid, response=my_response, round=self.round)
 
     def process_consensus_responses(self):
-        """Processa respostas e faz consenso final (líder)"""
+        """
+        Processa respostas e faz consenso final (líder).
+        
+        Verifica se recebeu respostas de todos os processos vivos,
+        faz consenso por maioria e avança para o próximo round.
+        """
         if self.pid != self.leader or self.round not in self.responses_received:
             return
             
@@ -131,7 +209,12 @@ class Node:
         threading.Timer(CONSENSUS_INTERVAL, self.start_consensus_round).start()
 
     def query_current_round(self):
-        """Líder pergunta qual round estamos (quando assume liderança)"""
+        """
+        Líder pergunta qual round estamos (quando assume liderança).
+        
+        Consulta todos os processos sobre o round atual e agenda
+        processamento do consenso de round.
+        """
         if self.pid != self.leader:
             return
             
@@ -149,7 +232,12 @@ class Node:
         threading.Timer(ROUND_QUERY_TIMEOUT, self.process_round_consensus).start()
 
     def process_round_consensus(self):
-        """Faz consenso do round atual por maioria"""
+        """
+        Faz consenso do round atual por maioria.
+        
+        Processa respostas da consulta de round, escolhe o round
+        por maioria e inicia primeira rodada de consenso.
+        """
         if not self.round_query_in_progress or self.pid != self.leader:
             return
             
@@ -178,11 +266,22 @@ class Node:
 
     # election helpers
     def start_election(self):
+        """
+        Inicia processo de eleição Bully.
+        
+        Reseta flags de eleição e chama o algoritmo bully.
+        """
         self.log("Iniciando processo de eleição", "🗳️", "red")
         self.received_ok = False
         bully(self)
 
     def become_leader(self):
+        """
+        Assume liderança do sistema.
+        
+        Define-se como líder, anuncia para todos e agenda
+        consulta de round atual.
+        """
         if self.leader == self.pid:
             self.log("Já sou o líder - ignorando", "🤴", "blue")
             return
@@ -196,6 +295,12 @@ class Node:
 
     # handlers
     def handle(self, data: bytes):
+        """
+        Processa mensagem recebida via multicast.
+        
+        Args:
+            data (bytes): Dados da mensagem recebida
+        """
         msg = unpack(data)
         op  = msg["op"]
 
@@ -301,6 +406,17 @@ class Node:
 
     # main loop --------------------------
     def run(self):
+        """
+        Executa o loop principal do processo distribuído.
+        
+        Sequência de inicialização:
+        1. Inicia thread de escuta de mensagens
+        2. Envia HELLO para descobrir líder existente
+        3. Inicia heartbeat periódico
+        4. Se não recebe HELLO_ACK, inicia eleição
+        5. Inicia monitoramento de falhas
+        6. Entra em loop infinito
+        """
         self.log(f"Iniciando processo com PID {self.pid} (total: {self.total})", "🚀", "green")
         listener = threading.Thread(target=self.listen, daemon=True)
         listener.start()
@@ -322,11 +438,28 @@ class Node:
             sleep(1)
 
     def listen(self):
+        """
+        Loop de escuta de mensagens multicast.
+        
+        Recebe mensagens do socket multicast e as processa
+        através do método handle(). Executa indefinidamente
+        em thread separada.
+        """
         while True:
             data, _ = self.sock.recvfrom(65535)
             self.handle(data)
 
 def main():
+    """
+    Função principal que inicializa e executa um nó do sistema.
+    
+    Processa argumentos da linha de comando e cria uma instância
+    do Node com os parâmetros especificados.
+    
+    Args (linha de comando):
+        --id: ID único do processo (obrigatório)
+        --nodes: Número total de processos (opcional, apenas para log)
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--id",     type=int, required=True)
     ap.add_argument("--nodes",  type=int, default=0, help="apenas para log")
