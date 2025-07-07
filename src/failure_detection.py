@@ -1,3 +1,10 @@
+"""
+Módulo de detecção de falhas para o sistema distribuído.
+
+Implementa heartbeat periódico e monitoramento de processos para detectar
+falhas por timeout e iniciar eleições quando necessário.
+"""
+
 from time import monotonic, sleep
 from threading import Thread
 from .communication import send
@@ -5,7 +12,20 @@ from .message import pack
 from .config import HEARTBEAT_INT, FAIL_TIMEOUT
 
 def start_heartbeat(node):
-
+    """
+    Inicia thread de heartbeat para o processo.
+    
+    Envia mensagens de heartbeat (HB) periodicamente para todos os processos
+    no grupo multicast, permitindo que outros processos saibam que este
+    processo está vivo.
+    
+    Args:
+        node: Instância do nó que enviará os heartbeats
+        
+    Note:
+        A thread é marcada como daemon para terminar automaticamente
+        quando o processo principal termina.
+    """
     def pulse():
         while True:
             send(node.sock, pack("HB", pid=node.pid))
@@ -14,7 +34,20 @@ def start_heartbeat(node):
     Thread(target=pulse, daemon=True).start()
 
 def start_monitor(node):
-
+    """
+    Inicia thread de monitoramento para detecção de falhas.
+    
+    Monitora continuamente a tabela de processos vivos, removendo processos
+    que não enviaram heartbeat dentro do FAIL_TIMEOUT. Inicia eleição se
+    o líder atual for detectado como morto.
+    
+    Args:
+        node: Instância do nó que executará o monitoramento
+        
+    Note:
+        A thread é marcada como daemon para terminar automaticamente
+        quando o processo principal termina.
+    """
     def monitor():
         while True:
             now = monotonic()
