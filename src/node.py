@@ -575,10 +575,10 @@ class Node:
         
         sleep(HELLO_TIMEOUT)
         
-        # Se não encontrou líder, inicia eleição
+        # Se não encontrou líder, deixa o loop principal lidar com isso
         if self.leader is None:
-            self.log("Nenhum líder encontrado - iniciando eleição", "yellow")
-            self.start_election()
+            self.log("Nenhum líder encontrado após HELLO inicial", "yellow")
+            # Não inicia eleição imediatamente, deixa o loop principal decidir
         else:
             self.log(f"Líder {self.leader} encontrado", "green")
 
@@ -587,6 +587,7 @@ class Node:
         # Loop principal simplificado
         last_status_log = 0
         last_network_log = 0
+        last_leader_search = 0  # Rastreia quando começou a procurar líder
         while not self.shutdown:
             # Aguarda reconexão se desconectado
             if not self.network.connected:
@@ -597,6 +598,9 @@ class Node:
                             self.log("[REDE] Líder perdeu conexão - limpando estado", "red")
                         self.leader = None
                         self.in_election = False
+                    
+                    # Reseta timer de busca ao perder conexão
+                    last_leader_search = 0
                 
                 now = monotonic()
                 if now - last_network_log > NETWORK_LOG_INTERVAL:
@@ -640,15 +644,39 @@ class Node:
                 
                 # Envia HELLO para descobrir novo líder
                 self.send("HELLO", pid=self.pid)
+                
+                # Reseta timer de busca por líder após reconexão
+                last_leader_search = 0
+                
                 sleep(NETWORK_RETRY_DELAY)
                 
             self.was_connected = self.network.connected
             
             # Se não tem líder, tenta descobrir
             if self.leader is None and not self.in_election:
-                self.log("Procurando líder...", "yellow")
-                self.send("HELLO", pid=self.pid)
-                sleep(LEADER_SEARCH_INTERVAL)
+                now = monotonic()
+                
+                # Se começou a procurar agora, marca o tempo
+                if last_leader_search == 0:
+                    last_leader_search = now
+                    self.log("Iniciando busca por líder...", "yellow")
+                
+                # Calcula há quanto tempo está procurando
+                search_duration = now - last_leader_search
+                
+                # Se passou muito tempo sem líder, inicia eleição
+                if search_duration > LEADER_SEARCH_TIMEOUT:
+                    self.log(f"Timeout na busca por líder ({search_duration:.1f}s) - iniciando eleição", "red")
+                    self.start_election()
+                    last_leader_search = 0  # Reseta timer
+                else:
+                    remaining = LEADER_SEARCH_TIMEOUT - search_duration
+                    self.log(f"Procurando líder... (timeout em {remaining:.1f}s)", "yellow")
+                    self.send("HELLO", pid=self.pid)
+                    sleep(LEADER_SEARCH_INTERVAL)
+            else:
+                # Se tem líder ou está em eleição, reseta timer
+                last_leader_search = 0
             
             # Log periódico de status
             now = monotonic()

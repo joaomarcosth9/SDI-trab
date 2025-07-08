@@ -40,7 +40,8 @@ MONITOR_STARTUP_GRACE = 5       # Período de carência inicial do monitor
 # Timeouts de rede e reconexão
 NETWORK_RETRY_DELAY = 2         # Delay entre tentativas de reconexão
 NETWORK_LOG_INTERVAL = 10       # Intervalo para log de status de rede
-LEADER_SEARCH_INTERVAL = 5      # Intervalo para procurar líder
+LEADER_SEARCH_INTERVAL = 3      # Intervalo para procurar líder
+LEADER_SEARCH_TIMEOUT = 10      # Timeout máximo para procurar líder antes de iniciar eleição
 
 # Outros timeouts
 STARTUP_DELAY = 0.5             # Delay inicial ao iniciar processo
