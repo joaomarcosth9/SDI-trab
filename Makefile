@@ -8,8 +8,8 @@ all: run
 run-uuid:
 	@echo "Starting $(N) nodes with UUID-based IDs..."
 	@for i in $$(seq 1 $(N)); do \
-		uuid=$$($(PYTHON) -c "import uuid, time; u=str(uuid.uuid4()); t=int(time.time()*1000)%100000; r=abs(hash(u))%1000; print(f'{t}{r:03d}')"); \
-		short_id=$$($(PYTHON) -c "import uuid; print(str(uuid.uuid4())[:8])"); \
+		uuid=$$($(PYTHON) -c "import random; print(random.getrandbits(64) % 10000)"); \
+		short_id=$$uuid; \
 		echo "Starting node $$i: PID=$$uuid ($$short_id)"; \
 		$(PYTHON) -m src.node --id $$uuid 2>&1 | sed "s/\[PID $$uuid\]/[$$short_id]/g" & \
 	done
@@ -17,22 +17,12 @@ run-uuid:
 	@echo "All $(N) nodes started with UUID-based IDs"
 
 run:
-	@echo "Starting 3 nodes..."
-	@make -s run1 &
-	@make -s run2 &
-	@make -s run3 &
-	@sleep 1
-	@echo "All nodes started. Press Ctrl+C to stop."
-	@wait
-
-run1:
-	$(PYTHON) -m src.node --id 1
-
-run2:
-	$(PYTHON) -m src.node --id 2
-
-run3:
-	$(PYTHON) -m src.node --id 3
+	@if [ -z "$$ID" ]; then \
+		echo "Please set the ID environment variable (e.g., 'ID=1 make run')"; \
+		exit 1; \
+	fi
+	@echo "Starting node with ID=$$ID..."
+	@$(PYTHON) -m src.node --id $$ID
 
 run-n:
 	@echo "Starting $(N) nodes..."

@@ -30,13 +30,13 @@ def receive(sock: socket.socket, buffer_size: int = 1024) -> tuple[bytes, tuple]
     except Exception as e:
         return None
 
+class NetworkManager:
     def __init__(self):
         self.sock = None
         self.connected = False
         self._reconnect()
     
     def _reconnect(self):
-        """Tenta reconectar e atualiza o status."""
         try:
             if self.sock:
                 self.sock.close()
@@ -83,7 +83,6 @@ def receive(sock: socket.socket, buffer_size: int = 1024) -> tuple[bytes, tuple]
         return result
     
     def close(self):
-        """Fecha o socket."""
         if self.sock:
             self.sock.close()
             self.sock = None
