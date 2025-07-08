@@ -8,7 +8,7 @@ falhas por timeout e iniciar eleições quando necessário.
 from time import monotonic, sleep
 from threading import Thread
 from .message import pack
-from .config import HEARTBEAT_INT, FAIL_TIMEOUT
+from .config import HEARTBEAT_INT, FAIL_TIMEOUT, MONITOR_INTERVAL, MONITOR_STARTUP_GRACE, LEADER_DEATH_DELAY
 import threading
 
 def start_heartbeat(node):
@@ -30,7 +30,7 @@ def start_heartbeat(node):
         while not node.shutdown:
             success = node.network.send(pack("HB", pid=node.pid))
             if not success:
-                node.log("❌ [HEARTBEAT] Falha ao enviar - rede indisponível", "red")
+                node.log("[HEARTBEAT] Falha ao enviar - rede indisponível", "red")
             sleep(HEARTBEAT_INT)
 
     Thread(target=pulse, daemon=True).start()
@@ -47,10 +47,10 @@ def start_monitor(node):
             try:
                 now = monotonic()
                 
-                # Carência de 5 segundos após iniciar monitor
+                # Carência inicial após iniciar monitor
                 # (para não marcar processos como mortos durante descoberta inicial)
-                if now - monitor_start_time < 5:
-                    sleep(0.3)
+                if now - monitor_start_time < MONITOR_STARTUP_GRACE:
+                    sleep(MONITOR_INTERVAL)
                     continue
                 
                 # Lista de processos para remover
@@ -68,18 +68,18 @@ def start_monitor(node):
                 for pid in to_remove:
                     if pid in node.alive:
                         del node.alive[pid]
-                        node.log(f"💀 [MONITOR] Processo {pid} considerado morto", "red")
+                        node.log(f"[MONITOR] Processo {pid} considerado morto", "red")
                 
                 # Se líder morreu, inicia eleição
                 if leader_died and not node.shutdown:
-                    node.log("⚠️ [MONITOR] Líder caiu - iniciando eleição", "red")
-                    threading.Timer(0.1, node.start_election).start()
+                    node.log("[MONITOR] Líder caiu - iniciando eleição", "red")
+                    threading.Timer(LEADER_DEATH_DELAY, node.start_election).start()
                 
             except Exception as e:
                 if not node.shutdown:
-                    node.log(f"❌ [MONITOR] Erro: {e}", "red")
+                    node.log(f"[MONITOR] Erro: {e}", "red")
             
-            sleep(0.3)
+            sleep(MONITOR_INTERVAL)
 
     Thread(target=monitor, daemon=True).start()
 

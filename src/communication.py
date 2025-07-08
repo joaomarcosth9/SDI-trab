@@ -1,6 +1,6 @@
 import socket, struct
 import time
-from .config import MULTICAST_GRP, MULTICAST_PORT
+from .config import MULTICAST_GRP, MULTICAST_PORT, NETWORK_RETRY_DELAY
 
 def create_socket() -> socket.socket:
     """
@@ -33,7 +33,7 @@ def safe_create_socket() -> socket.socket:
         try:
             return create_socket()
         except Exception as e:
-            time.sleep(2)
+            time.sleep(NETWORK_RETRY_DELAY)
 
 def send(sock: socket.socket, data: bytes) -> bool:
     """
@@ -85,10 +85,10 @@ class NetworkManager:
                 self.sock.close()
             self.sock = safe_create_socket()
             self.connected = True
-            print("✓ Conectado à rede")
+            print("[REDE] Conectado à rede")
         except Exception as e:
             self.connected = False
-            print(f"✗ Falha na conexão: {e}")
+            print(f"[REDE] Falha na conexão: {e}")
     
     def send(self, data: bytes) -> bool:
         """

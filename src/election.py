@@ -8,7 +8,7 @@ distribuído onde processos têm IDs únicos e apenas um pode ser líder.
 from threading import Event, Thread
 from time import monotonic, sleep
 from .message import pack, unpack
-from .config import BULLY_TIMEOUT
+from .config import BULLY_TIMEOUT, BULLY_POLL_INTERVAL
 
 def bully(node):
     """
@@ -42,7 +42,7 @@ def bully(node):
             node.received_ok = False  # Reseta para próxima eleição
             node.log("🏁 [ELEIÇÃO] Algoritmo bully finalizado (OK recebido)", "green")
             return
-        sleep(0.1)
+        sleep(BULLY_POLL_INTERVAL)
 
     # Se chegou aqui, ninguém maior respondeu
     node.log("⏰ [ELEIÇÃO] Timeout - nenhum processo maior respondeu", "yellow")
