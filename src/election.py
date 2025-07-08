@@ -47,9 +47,9 @@ def bully(node):
     # Se chegou aqui, ninguém maior respondeu
     node.log("[ELEIÇÃO] Timeout - nenhum processo maior respondeu", "yellow")
     
-    # Inicia consenso de round antes de assumir liderança
-    node.log("[ELEIÇÃO] Iniciando consenso de round", "green")
-    node.start_round_consensus()
+    # Assume liderança
+    node.log("[ELEIÇÃO] Assumindo liderança", "green")
+    node.become_leader()
     
     node.log("[ELEIÇÃO] Algoritmo bully finalizado (timeout)", "yellow")
 

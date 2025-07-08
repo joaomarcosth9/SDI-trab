@@ -126,6 +126,10 @@ class Node:
         """
         Agenda a próxima rodada de consenso.
         """
+        # Só agenda se for líder
+        if self.leader != self.pid:
+            return
+            
         if self.consensus_timer:
             self.consensus_timer.cancel()
             
@@ -219,14 +223,17 @@ class Node:
 
     def start_round_consensus(self):
         """
-        Inicia coleta de rounds para consenso antes de assumir liderança.
+        Inicia coleta de rounds para consenso (chamado pelo líder).
         """
         with self.state_lock:
+            if self.pid != self.leader:
+                return  # Só líder pode iniciar consenso de round
+                
             # Limpa votos anteriores
             self.round_votes = {self.pid: self.round}  # Inclui próprio voto
             alive_pids = self.get_alive_pids()
             
-            self.log(f"[ELEIÇÃO] Coletando rounds dos processos vivos: {alive_pids}", "yellow")
+            self.log(f"[LÍDER] Iniciando consenso de round - processos vivos: {alive_pids}", "green")
             
             # Solicita round de todos os processos vivos
             self.send("ROUND_REQUEST", from_pid=self.pid)
@@ -240,12 +247,14 @@ class Node:
     
     def process_round_consensus(self):
         """
-        Processa votos de round e assume liderança com round consensado.
+        Processa votos de round e sincroniza sistema para round consensado.
         """
         with self.state_lock:
+            if self.pid != self.leader:
+                return  # Só líder processa consenso
+                
             if not self.round_votes:
-                # Se não recebeu votos, usa próprio round
-                self.become_leader()
+                self.log("[CONSENSO ROUND] Nenhum voto recebido, mantendo round atual", "yellow")
                 return
                 
             # Conta votos por round
@@ -256,19 +265,21 @@ class Node:
             # Encontra round com mais votos (maioria)
             consensus_round = max(round_counts.items(), key=lambda x: x[1])[0]
             
-            self.log(f"[CONSENSO ROUND] Votos recebidos: {dict(self.round_votes)}", "yellow")
-            self.log(f"[CONSENSO ROUND] Contagem: {dict(round_counts)}", "yellow") 
-            self.log(f"[CONSENSO ROUND] Round escolhido por maioria: {consensus_round}", "green")
+            self.log(f"[CONSENSO ROUND] Votos recebidos: {dict(self.round_votes)}", "purple")
+            self.log(f"[CONSENSO ROUND] Contagem: {dict(round_counts)}", "purple") 
+            self.log(f"[CONSENSO ROUND] Round escolhido por maioria: {consensus_round} (votos: {round_counts[consensus_round]})", "green")
             
-            # Atualiza próprio round para o consensado
-            old_round = self.round
-            self.round = consensus_round
-            
-            if old_round != self.round:
-                self.log(f"[CONSENSO ROUND] Atualizando round de {old_round} para {self.round}", "green")
-        
-        # Agora assume liderança com round consensado
-        self.become_leader()
+            # Se o round consensado é diferente do atual, atualiza
+            if self.round != consensus_round:
+                old_round = self.round
+                self.round = consensus_round
+                self.log(f"[CONSENSO ROUND] Líder atualizando round de {old_round} para {self.round}", "green")
+                
+                # Envia update para todos sincronizarem
+                self.send("ROUND_UPDATE", round=self.round)
+                self.log(f"[CONSENSO ROUND] Enviado ROUND_UPDATE para sincronizar todos no round {self.round}", "green")
+            else:
+                self.log(f"[CONSENSO ROUND] Round já está correto: {self.round}", "green")
 
     def become_leader(self):
         """
@@ -285,15 +296,23 @@ class Node:
             self.in_election = False
             self.log("Assumi liderança", "green")
             
-            # Pega o maior round conhecido (incluindo o próprio)
-            # para garantir que não volta no tempo
-            max_round = self.round
-            self.log(f"Assumindo liderança com round {max_round}", "green")
+            # Cancela timer de consenso se existir
+            if self.consensus_timer:
+                self.consensus_timer.cancel()
+                self.consensus_timer = None
             
-            self.send("LEADER", pid=self.pid, round=max_round)
+            # Assume com seu próprio round inicialmente
+            initial_round = self.round
+            self.log(f"Assumindo liderança com round inicial {initial_round}", "green")
             
-        # Inicia consenso após um delay
-        threading.Timer(LEADER_STARTUP_DELAY, self.start_consensus_round).start()
+            self.send("LEADER", pid=self.pid, round=initial_round)
+            
+        # Após assumir, inicia consenso de round para sincronizar todos
+        threading.Timer(LEADER_STARTUP_DELAY, self.start_round_consensus).start()
+        
+        # Agenda início do consenso regular após sincronização
+        threading.Timer(LEADER_STARTUP_DELAY + ROUND_CONSENSUS_TIMEOUT + 0.5, 
+                       self.start_consensus_round).start()
 
     def handle(self, data: bytes):
         """
@@ -315,7 +334,8 @@ class Node:
             else:
                 self.log(f"[HELLO] Recebido de processo {sender_pid}", "yellow")
             
-            if self.pid == self.leader:
+            # Só responde se realmente for líder E estiver conectado
+            if self.pid == self.leader and self.network.connected:
                 self.send("HELLO_ACK", pid=self.pid, round=self.round, to=sender_pid)
                 self.log(f"[HELLO_ACK] Enviado para processo {sender_pid} (round {self.round})", "green")
 
@@ -437,10 +457,17 @@ class Node:
             self.log(f"[ROUND_UPDATE] Atualizando round de {old_round} para {new_round}", "blue")
 
         elif op == "ROUND_REQUEST":
-            # Responde com próprio round quando solicitado
+            # Responde com próprio round quando solicitado pelo líder
             from_pid = msg["from_pid"]
-            self.log(f"[ROUND_REQUEST] Recebido de {from_pid}, respondendo com round {self.round}", "yellow")
-            self.send("ROUND_RESPONSE", pid=self.pid, round=self.round, to=from_pid)
+            
+            # Verifica se quem está pedindo é o líder
+            if self.leader is None:
+                self.log(f"[ROUND_REQUEST] Recebido de {from_pid} mas ainda não há líder", "yellow")
+            elif from_pid == self.leader:
+                self.log(f"[ROUND_REQUEST] Recebido do líder {from_pid}, respondendo com round {self.round}", "cyan")
+                self.send("ROUND_RESPONSE", pid=self.pid, round=self.round, to=from_pid)
+            else:
+                self.log(f"[ROUND_REQUEST] Ignorando pedido de {from_pid} (líder atual é {self.leader})", "yellow")
             
         elif op == "ROUND_RESPONSE":
             # Coleta votos de round durante eleição
@@ -526,6 +553,14 @@ class Node:
         while not self.shutdown:
             # Aguarda reconexão se desconectado
             if not self.network.connected:
+                # Se estava conectado e perdeu conexão, limpa estado de líder
+                if self.was_connected:
+                    with self.state_lock:
+                        if self.leader == self.pid:
+                            self.log("[REDE] Líder perdeu conexão - limpando estado", "red")
+                        self.leader = None
+                        self.in_election = False
+                
                 now = monotonic()
                 if now - last_network_log > NETWORK_LOG_INTERVAL:
                     self.log("[REDE] Sem conexão - aguardando...", "red")
@@ -536,7 +571,37 @@ class Node:
             # Se reconectou, redescobre líder
             if not self.was_connected and self.network.connected:
                 self.log("[REDE] Reconectado - redescobrir líder", "green")
+                
+                # IMPORTANTE: Cancela timers de liderança antes de limpar estado
+                if self.consensus_timer:
+                    self.consensus_timer.cancel()
+                    self.consensus_timer = None
+                    self.log("[REDE] Timer de consenso cancelado", "yellow")
+                    
+                if self.round_consensus_timer:
+                    self.round_consensus_timer.cancel() 
+                    self.round_consensus_timer = None
+                    self.log("[REDE] Timer de consenso de round cancelado", "yellow")
+                
+                # Limpa estado de liderança
                 self.leader = None
+                self.in_election = False
+                
+                # Limpa estados de consenso antigos
+                self.values_received.clear()
+                self.responses_received.clear()
+                self.responses_sent.clear()
+                self.round_votes.clear()
+                
+                # Cancela e limpa timers de valores
+                for timer in self.value_timers.values():
+                    try:
+                        timer.cancel()
+                    except:
+                        pass
+                self.value_timers.clear()
+                
+                # Envia HELLO para descobrir novo líder
                 self.send("HELLO", pid=self.pid)
                 sleep(NETWORK_RETRY_DELAY)
                 
@@ -552,10 +617,12 @@ class Node:
             now = monotonic()
             if now - last_status_log > STATUS_LOG_INTERVAL:
                 with self.state_lock:
-                    if self.leader == self.pid:
+                    if self.leader == self.pid and self.network.connected:
                         self.log(f"[LÍDER ATIVO] Round: {self.round}, Processos vivos: {len(self.get_alive_pids())}", "green")
                     elif self.leader is not None:
                         self.log(f"[SEGUIDOR] Líder: {self.leader}, Round: {self.round}", "blue")
+                    else:
+                        self.log(f"[SEM LÍDER] Aguardando eleição...", "yellow")
                 last_status_log = now
                 
             sleep(MAIN_LOOP_INTERVAL)
