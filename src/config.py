@@ -23,11 +23,12 @@ VALUE_PROCESS_DELAY = 1.0           # Delay para processar valores recebidos
 START_CONSENSUS_DELAY = 1.5         # Delay para processar valores no START_CONSENSUS
 
 # Timeouts de eleição
-ELECTION_START_DELAY = 0.3      # Delay para iniciar eleição após receber ELECTION
-LEADER_DEATH_DELAY = 0.1        # Delay para iniciar eleição após líder morrer
-BULLY_POLL_INTERVAL = 0.1       # Intervalo de polling no algoritmo bully
+ELECTION_TIMEOUT = 2.0          # Timeout geral de eleição
+ELECTION_START_DELAY = 0.5      # Delay para iniciar eleição após receber ELECTION
+ROUND_CONSENSUS_TIMEOUT = 1.0   # Timeout para coletar votos de round
 
 # Timeouts de liderança
+LEADER_TIMEOUT = 3.0            # Timeout para considerar líder morto
 LEADER_STARTUP_DELAY = 2        # Delay para iniciar consenso após virar líder
 
 # Timeouts de monitoramento

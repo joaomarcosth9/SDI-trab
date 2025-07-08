@@ -43,6 +43,10 @@ class Node:
         self.in_election = False
         self.received_ok = False
         
+        # Coleta de rounds durante eleição
+        self.round_votes = {}  # {pid: round} para consenso de round
+        self.round_consensus_timer = None
+        
         # Estado de consenso
         self.values_received = {}
         self.responses_received = {}
@@ -213,6 +217,59 @@ class Node:
             if self.leader != self.pid:
                 self.in_election = False
 
+    def start_round_consensus(self):
+        """
+        Inicia coleta de rounds para consenso antes de assumir liderança.
+        """
+        with self.state_lock:
+            # Limpa votos anteriores
+            self.round_votes = {self.pid: self.round}  # Inclui próprio voto
+            alive_pids = self.get_alive_pids()
+            
+            self.log(f"[ELEIÇÃO] Coletando rounds dos processos vivos: {alive_pids}", "yellow")
+            
+            # Solicita round de todos os processos vivos
+            self.send("ROUND_REQUEST", from_pid=self.pid)
+            
+        # Agenda processamento dos votos
+        self.round_consensus_timer = threading.Timer(
+            ROUND_CONSENSUS_TIMEOUT, 
+            lambda: self.process_round_consensus()
+        )
+        self.round_consensus_timer.start()
+    
+    def process_round_consensus(self):
+        """
+        Processa votos de round e assume liderança com round consensado.
+        """
+        with self.state_lock:
+            if not self.round_votes:
+                # Se não recebeu votos, usa próprio round
+                self.become_leader()
+                return
+                
+            # Conta votos por round
+            round_counts = defaultdict(int)
+            for pid, round_vote in self.round_votes.items():
+                round_counts[round_vote] += 1
+            
+            # Encontra round com mais votos (maioria)
+            consensus_round = max(round_counts.items(), key=lambda x: x[1])[0]
+            
+            self.log(f"[CONSENSO ROUND] Votos recebidos: {dict(self.round_votes)}", "yellow")
+            self.log(f"[CONSENSO ROUND] Contagem: {dict(round_counts)}", "yellow") 
+            self.log(f"[CONSENSO ROUND] Round escolhido por maioria: {consensus_round}", "green")
+            
+            # Atualiza próprio round para o consensado
+            old_round = self.round
+            self.round = consensus_round
+            
+            if old_round != self.round:
+                self.log(f"[CONSENSO ROUND] Atualizando round de {old_round} para {self.round}", "green")
+        
+        # Agora assume liderança com round consensado
+        self.become_leader()
+
     def become_leader(self):
         """
         Assume liderança do sistema.
@@ -379,6 +436,23 @@ class Node:
             self.round = new_round
             self.log(f"[ROUND_UPDATE] Atualizando round de {old_round} para {new_round}", "blue")
 
+        elif op == "ROUND_REQUEST":
+            # Responde com próprio round quando solicitado
+            from_pid = msg["from_pid"]
+            self.log(f"[ROUND_REQUEST] Recebido de {from_pid}, respondendo com round {self.round}", "yellow")
+            self.send("ROUND_RESPONSE", pid=self.pid, round=self.round, to=from_pid)
+            
+        elif op == "ROUND_RESPONSE":
+            # Coleta votos de round durante eleição
+            if msg.get("to") == self.pid:
+                sender_pid = msg["pid"]
+                sender_round = msg["round"]
+                
+                with self.state_lock:
+                    if hasattr(self, 'round_votes'):  # Verifica se está coletando votos
+                        self.round_votes[sender_pid] = sender_round
+                        self.log(f"[ROUND_RESPONSE] Recebido voto: PID {sender_pid} votou round {sender_round}", "yellow")
+
     def process_maximum_value(self, round_num: int):
         """
         Processa valores recebidos e calcula resposta.
@@ -509,6 +583,13 @@ class Node:
         if self.consensus_timer:
             try:
                 self.consensus_timer.cancel()
+            except:
+                pass
+                
+        # Cancela timer de consenso de round se existir
+        if self.round_consensus_timer:
+            try:
+                self.round_consensus_timer.cancel()
             except:
                 pass
             
