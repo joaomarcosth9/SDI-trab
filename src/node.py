@@ -83,7 +83,7 @@ class Node:
         
         import time
         timestamp = time.strftime("%H:%M:%S")
-        prefix = "♔ " if self.leader == self.pid else "□ "
+        prefix = "♔ " if self.leader == self.pid else "○ "
         print(f"[{timestamp}] [PID {self.pid}] {color_code}{prefix}{msg}{reset_code}", flush=True)
 
     def send(self, op: str, **kv):

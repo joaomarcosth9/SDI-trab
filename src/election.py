@@ -23,14 +23,14 @@ def bully(node):
     Args:
         node: Instância do nó que está iniciando a eleição
     """
-    node.log("🗳️ [ELEIÇÃO] Iniciando eleição bully", "red")
+    node.log("[ELEIÇÃO] Iniciando eleição bully", "red")
     
     # Reseta o flag antes de iniciar eleição
     node.received_ok = False
     
     # Manda por multicast para TODOS 
     node.send("ELECTION", source=node.pid)
-    node.log("📤 [ELEIÇÃO] Enviado ELECTION para todos", "yellow")
+    node.log("[ELEIÇÃO] Enviado ELECTION para todos", "yellow")
 
     # Aguarda por respostas OK
     start_time = monotonic()
@@ -38,18 +38,18 @@ def bully(node):
     
     while monotonic() - start_time < timeout:
         if node.received_ok:
-            node.log("✅ [ELEIÇÃO] Recebido OK de processo maior - parando", "green")
+            node.log("[ELEIÇÃO] Recebido OK de processo maior - parando", "green")
             node.received_ok = False  # Reseta para próxima eleição
-            node.log("🏁 [ELEIÇÃO] Algoritmo bully finalizado (OK recebido)", "green")
+            node.log("[ELEIÇÃO] Algoritmo bully finalizado (OK recebido)", "green")
             return
         sleep(BULLY_POLL_INTERVAL)
 
     # Se chegou aqui, ninguém maior respondeu
-    node.log("⏰ [ELEIÇÃO] Timeout - nenhum processo maior respondeu", "yellow")
+    node.log("[ELEIÇÃO] Timeout - nenhum processo maior respondeu", "yellow")
     
     # Assume liderança
-    node.log("👑 [ELEIÇÃO] Assumindo liderança", "green")
+    node.log("[ELEIÇÃO] Assumindo liderança", "green")
     node.become_leader()
     
-    node.log("🏁 [ELEIÇÃO] Algoritmo bully finalizado (timeout)", "yellow")
+    node.log("[ELEIÇÃO] Algoritmo bully finalizado (timeout)", "yellow")
 
