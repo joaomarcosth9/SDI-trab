@@ -8,10 +8,10 @@ all: run
 run-uuid:
 	@echo "Starting $(N) nodes with UUID-based IDs..."
 	@for i in $$(seq 1 $(N)); do \
-		uuid=$$(python -c "import uuid, time; u=str(uuid.uuid4()); t=int(time.time()*1000)%100000; r=abs(hash(u))%1000; print(f'{t}{r:03d}')"); \
-		short_id=$$(python -c "import uuid; print(str(uuid.uuid4())[:8])"); \
+		uuid=$$($(PYTHON) -c "import uuid, time; u=str(uuid.uuid4()); t=int(time.time()*1000)%100000; r=abs(hash(u))%1000; print(f'{t}{r:03d}')"); \
+		short_id=$$($(PYTHON) -c "import uuid; print(str(uuid.uuid4())[:8])"); \
 		echo "Starting node $$i: PID=$$uuid ($$short_id)"; \
-		python -m src.node --id $$uuid 2>&1 | sed "s/\[PID $$uuid\]/[$$short_id]/g" & \
+		$(PYTHON) -m src.node --id $$uuid 2>&1 | sed "s/\[PID $$uuid\]/[$$short_id]/g" & \
 	done
 	@sleep 1
 	@echo "All $(N) nodes started with UUID-based IDs"
@@ -26,19 +26,19 @@ run:
 	@wait
 
 run1:
-	python -m src.node --id 1
+	$(PYTHON) -m src.node --id 1
 
 run2:
-	python -m src.node --id 2
+	$(PYTHON) -m src.node --id 2
 
 run3:
-	python -m src.node --id 3
+	$(PYTHON) -m src.node --id 3
 
 run-n:
 	@echo "Starting $(N) nodes..."
 	@for i in $$(seq 1 $(N)); do \
 		echo "Starting node $$i"; \
-		python -m src.node --id $$i & \
+		$(PYTHON) -m src.node --id $$i & \
 	done
 	@sleep 1
 	@echo "All $(N) nodes started"
