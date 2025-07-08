@@ -350,8 +350,9 @@ class Node:
                     
                     # Limpa estados antigos se mudou de round
                     if old_round != self.round:
-                        # Remove dados de rounds antigos
-                        rounds_to_remove = [r for r in self.values_received.keys() if r < self.round]
+                        # Remove dados de rounds antigos E futuros (sync com líder)
+                        # Líder pode estar em round anterior após reconexão
+                        rounds_to_remove = [r for r in self.values_received.keys() if r != self.round]
                         for r in rounds_to_remove:
                             self.values_received.pop(r, None)
                             self.responses_received.pop(r, None)
@@ -361,6 +362,8 @@ class Node:
                             if r in self.value_timers:
                                 self.value_timers[r].cancel()
                                 self.value_timers.pop(r, None)
+                                
+                        self.log(f"[HELLO_ACK] Limpei estados de {len(rounds_to_remove)} rounds diferentes", "yellow")
                 
                 self.log(f"Conectado ao líder {self.leader}, round {self.round}", "green")
 
@@ -404,8 +407,26 @@ class Node:
             self.log(f"[CONSENSO] Líder iniciou round {consensus_round}", "cyan")
             
             with self.state_lock:
-                if consensus_round not in self.values_received:
-                    self.values_received[consensus_round] = {}
+                # IMPORTANTE: Limpa estado anterior do round se existir
+                # Permite reprocessar o round se líder reiniciar após reconexão
+                if consensus_round in self.responses_sent:
+                    self.log(f"[CONSENSO] Limpando resposta anterior do round {consensus_round}", "yellow")
+                    self.responses_sent.pop(consensus_round, None)
+                
+                # Se líder está em round anterior ao nosso, limpa estados futuros
+                if consensus_round <= self.round:
+                    rounds_to_clear = [r for r in self.responses_sent.keys() if r >= consensus_round]
+                    for r in rounds_to_clear:
+                        self.responses_sent.pop(r, None)
+                        self.log(f"[CONSENSO] Limpando estado futuro do round {r}", "yellow")
+                
+                # Cancela timer anterior se existir
+                if consensus_round in self.value_timers:
+                    self.value_timers[consensus_round].cancel()
+                    self.value_timers.pop(consensus_round, None)
+                
+                # Reinicia valores para este round
+                self.values_received[consensus_round] = {}
                 
                 # Calcula e envia valor
                 my_value = self.calculate_current_value()
@@ -413,11 +434,10 @@ class Node:
                 self.log(f"[CONSENSO] Meu valor gerado: {my_value} (round {consensus_round})", "cyan")
                 self.send("VALUE", pid=self.pid, value=my_value, round=consensus_round)
                 
-                # Agenda processamento para este round específico (como se fosse um VALUE)
-                if consensus_round not in self.value_timers:
-                    timer = threading.Timer(START_CONSENSUS_DELAY, lambda: self.process_maximum_value(consensus_round))
-                    timer.start()
-                    self.value_timers[consensus_round] = timer
+                # Agenda processamento para este round específico
+                timer = threading.Timer(START_CONSENSUS_DELAY, lambda: self.process_maximum_value(consensus_round))
+                timer.start()
+                self.value_timers[consensus_round] = timer
 
         elif op == "VALUE":
             round_num = msg["round"]
@@ -455,6 +475,21 @@ class Node:
             old_round = self.round
             self.round = new_round
             self.log(f"[ROUND_UPDATE] Atualizando round de {old_round} para {new_round}", "blue")
+            
+            with self.state_lock:
+                # Limpa estados de rounds anteriores ao atualizar
+                rounds_to_clear = [r for r in list(self.responses_sent.keys()) if r < new_round]
+                for r in rounds_to_clear:
+                    self.values_received.pop(r, None)
+                    self.responses_received.pop(r, None) 
+                    self.responses_sent.pop(r, None)
+                    
+                    if r in self.value_timers:
+                        self.value_timers[r].cancel()
+                        self.value_timers.pop(r, None)
+                        
+                if rounds_to_clear:
+                    self.log(f"[ROUND_UPDATE] Limpei estados de {len(rounds_to_clear)} rounds antigos", "blue")
 
         elif op == "ROUND_REQUEST":
             # Responde com próprio round quando solicitado pelo líder
@@ -486,10 +521,12 @@ class Node:
         """
         with self.state_lock:
             if round_num not in self.values_received:
+                self.log(f"[PROCESS_MAX] Round {round_num} não tem valores recebidos", "red")
                 return
             
             # Verifica se já enviou resposta para este round
             if round_num in self.responses_sent:
+                self.log(f"[PROCESS_MAX] Já enviou resposta para round {round_num} (valor: {self.responses_sent[round_num]})", "yellow")
                 return
                 
             values = list(self.values_received[round_num].values())
