@@ -8,21 +8,58 @@ Sistema de eleição de líder e consenso distribuído usando multicast UDP.
 pip install -r requirements.txt
 ```
 
-## Execução Rápida
-
-### Executar 3 processos (IDs 1, 2, 3)
-```bash
-make run
-```
-
-### Executar N processos com IDs aleatórios
-```bash
-N=5 make run-uuid
-```
+## Execução
 
 ### Executar processo individual
 ```bash
+ID=1 make run
+ID=2 make run
+ID=3 make run
+```
+
+### Executar múltiplos processos (IDs sequenciais)
+```bash
+# Executa 3 processos (IDs 1, 2, 3)
+make run-n
+
+# Executa 5 processos (IDs 1, 2, 3, 4, 5)
+N=5 make run-n
+```
+
+### Executar com IDs aleatórios (UUID)
+```bash
+# Executa 3 processos com IDs aleatórios
+make run-uuid
+
+# Executa 5 processos com IDs aleatórios
+N=5 make run-uuid
+```
+
+### Executar diretamente (sem Makefile)
+```bash
 python -m src.node --id 42
+```
+
+## Monitoramento e Debug
+
+### Monitorar processos em tempo real
+```bash
+make watch
+```
+
+### Matar processos
+```bash
+# Mata todos os processos
+make kill
+
+# Mata apenas o líder (maior PID)
+make kill-leader
+```
+
+### Limpeza
+```bash
+# Remove arquivos temporários
+make clean
 ```
 
 ## Configuração
@@ -63,10 +100,10 @@ make kill-leader
 ### Ver logs detalhados
 ```bash
 # Terminal 1
-python -m src.node --id 1 2>&1 | tee node1.log
+ID=1 make run 2>&1 | tee node1.log
 
 # Terminal 2
-python -m src.node --id 2 2>&1 | tee node2.log
+ID=2 make run 2>&1 | tee node2.log
 ```
 
 ### Testar com diferentes velocidades
