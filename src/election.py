@@ -23,50 +23,33 @@ def bully(node):
     Args:
         node: Instância do nó que está iniciando a eleição
     """
-    node.log("Iniciando eleição bully - enviando para TODOS os processos", "🔥", "red")
+    node.log("🗳️ [ELEIÇÃO] Iniciando eleição bully", "red")
     
     # Reseta o flag antes de iniciar eleição
     node.received_ok = False
     
     # Manda por multicast para TODOS 
     node.send("ELECTION", source=node.pid)
-    node.log(f"Enviado ELECTION para todos os processos", "📡", "yellow")
+    node.log("📤 [ELEIÇÃO] Enviado ELECTION para todos", "yellow")
 
     # Aguarda por respostas OK
     start_time = monotonic()
     timeout = BULLY_TIMEOUT
     
     while monotonic() - start_time < timeout:
-        # Verifica se recebeu OK
         if node.received_ok:
-            node.log("Recebido OK de processo maior - parando eleição", "✅", "green")
-            node.received_ok = False
-            node.log("Algoritmo bully finalizado (OK recebido)", "🏁", "green")
+            node.log("✅ [ELEIÇÃO] Recebido OK de processo maior - parando", "green")
+            node.received_ok = False  # Reseta para próxima eleição
+            node.log("🏁 [ELEIÇÃO] Algoritmo bully finalizado (OK recebido)", "green")
             return
-        
-        # Verifica se já há líder válido (pode ter sido detectado durante eleição)
-        if node.leader is not None and node.leader > node.pid:
-            node.log(f"Líder {node.leader} detectado durante eleição - cancelando", "🛑", "blue")
-            node.log("Algoritmo bully finalizado (líder detectado)", "🏁", "blue")
-            return
-            
         sleep(0.1)
 
     # Se chegou aqui, ninguém maior respondeu
-    node.log("Timeout da eleição - nenhum processo maior respondeu", "⏰", "yellow")
+    node.log("⏰ [ELEIÇÃO] Timeout - nenhum processo maior respondeu", "yellow")
     
-    # Verifica se há processos maiores ANTES de imprimir que vai assumir
-    alive_pids = list(node.alive.keys())
-    bigger_processes = [pid for pid in alive_pids if pid > node.pid]
-    
-    if bigger_processes:
-        node.log(f"Processos maiores detectados: {bigger_processes} - não assumindo liderança", "⚠️", "yellow")
-        node.log("Algoritmo bully finalizado (processos maiores encontrados)", "🏁", "yellow")
-        return
-    
-    # Só agora assume liderança
-    node.log("Assumindo liderança", "👑", "green")
+    # Assume liderança
+    node.log("👑 [ELEIÇÃO] Assumindo liderança", "green")
     node.become_leader()
     
-    node.log("Algoritmo bully finalizado (timeout)", "🏁", "yellow")
+    node.log("🏁 [ELEIÇÃO] Algoritmo bully finalizado (timeout)", "yellow")
 

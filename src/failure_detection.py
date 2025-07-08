@@ -27,10 +27,10 @@ def start_heartbeat(node):
         quando o processo principal termina.
     """
     def pulse():
-        while True:
+        while not node.shutdown:
             success = node.network.send(pack("HB", pid=node.pid))
             if not success:
-                node.log("Falha ao enviar heartbeat - rede indisponível", "💔", "red")
+                node.log("❌ [HEARTBEAT] Falha ao enviar - rede indisponível", "red")
             sleep(HEARTBEAT_INT)
 
     Thread(target=pulse, daemon=True).start()
@@ -43,7 +43,7 @@ def start_monitor(node):
     monitor_start_time = monotonic()
     
     def monitor():
-        while True:
+        while not node.shutdown:
             try:
                 now = monotonic()
                 
@@ -68,15 +68,16 @@ def start_monitor(node):
                 for pid in to_remove:
                     if pid in node.alive:
                         del node.alive[pid]
-                        node.log(f"Processo {pid} considerado MORTO", "💀", "red")
+                        node.log(f"💀 [MONITOR] Processo {pid} considerado morto", "red")
                 
                 # Se líder morreu, inicia eleição
-                if leader_died:
-                    node.log("Líder caiu ➜ iniciando eleição", "🔥", "red")
+                if leader_died and not node.shutdown:
+                    node.log("⚠️ [MONITOR] Líder caiu - iniciando eleição", "red")
                     threading.Timer(0.1, node.start_election).start()
                 
             except Exception as e:
-                node.log(f"Erro no monitor: {e}", "❌", "red")
+                if not node.shutdown:
+                    node.log(f"❌ [MONITOR] Erro: {e}", "red")
             
             sleep(0.3)
 
