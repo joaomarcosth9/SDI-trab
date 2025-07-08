@@ -1,21 +1,8 @@
 import socket, struct
-from .config import MULTICAST_GRP, MULTICAST_PORT
+import time
+from .config import MULTICAST_GRP, MULTICAST_PORT, NETWORK_RETRY_DELAY
 
 def create_socket() -> socket.socket:
-    """
-    Cria e configura um socket UDP para comunicação multicast.
-    
-    Configura o socket para:
-    - Reutilizar endereço (SO_REUSEADDR)
-    - Fazer bind na porta multicast
-    - Juntar-se ao grupo multicast
-    
-    Returns:
-        socket.socket: Socket UDP configurado para multicast
-        
-    Raises:
-        socket.error: Se houver erro na criação ou configuração do socket
-    """
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("", MULTICAST_PORT))
@@ -23,16 +10,81 @@ def create_socket() -> socket.socket:
     sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
     return sock
 
-def send(sock: socket.socket, data: bytes) -> None:
-    """
-    Envia dados via multicast para o grupo configurado.
+def safe_create_socket() -> socket.socket:
+    while True:
+        try:
+            return create_socket()
+        except Exception as e:
+            time.sleep(NETWORK_RETRY_DELAY)
+
+def send(sock: socket.socket, data: bytes) -> bool:
+    try:
+        sock.sendto(data, (MULTICAST_GRP, MULTICAST_PORT))
+        return True
+    except Exception as e:
+        return False
+
+def receive(sock: socket.socket, buffer_size: int = 1024) -> tuple[bytes, tuple] | None:
+    try:
+        return sock.recvfrom(buffer_size)
+    except Exception as e:
+        return None
+
+class NetworkManager:
+    def __init__(self):
+        self.sock = None
+        self.connected = False
+        self._reconnect()
     
-    Args:
-        sock (socket.socket): Socket UDP configurado para multicast
-        data (bytes): Dados a serem enviados (mensagem serializada)
+    def _reconnect(self):
+        try:
+            if self.sock:
+                self.sock.close()
+            self.sock = safe_create_socket()
+            self.connected = True
+            print("[REDE] Conectado à rede")
+        except Exception as e:
+            self.connected = False
+            print(f"[REDE] Falha na conexão: {e}")
+    
+    def send(self, data: bytes) -> bool:
+        if not self.connected:
+            self._reconnect()
+            
+        if not self.connected:
+            return False
+            
+        success = send(self.sock, data)
         
-    Raises:
-        socket.error: Se houver erro no envio da mensagem
-    """
-    sock.sendto(data, (MULTICAST_GRP, MULTICAST_PORT))
+        if not success:
+            print("Conexão perdida. Tentando reconectar...")
+            self.connected = False
+            self._reconnect()
+            
+            if self.connected:
+                return send(self.sock, data)
+        
+        return success
+    
+    def receive(self, buffer_size: int = 1024) -> tuple[bytes, tuple] | None:
+        if not self.connected:
+            self._reconnect()
+            
+        if not self.connected:
+            return None
+            
+        result = receive(self.sock, buffer_size)
+        
+        if result is None:
+            print("Conexão perdida. Tentando reconectar...")
+            self.connected = False
+            self._reconnect()
+        
+        return result
+    
+    def close(self):
+        if self.sock:
+            self.sock.close()
+            self.sock = None
+        self.connected = False
 
