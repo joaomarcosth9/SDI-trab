@@ -210,21 +210,21 @@ O sistema produz logs coloridos com emojis para facilitar debugging:
 
 ```bash
 # Terminal 1
-python -m src.node --id 1 --nodes 3
-[PID 1] 🚀 Iniciando processo com PID 1 (total: 3)
+python -m src.node --id 1
+[PID 1] 🚀 Iniciando processo com PID 1
 [PID 1] 🔍 Enviando HELLO para descobrir líder
 [PID 1] 🔥 Sem HELLO_ACK ➜ iniciando eleição
 [PID 1] 👑 Assumiu liderança
 
 # Terminal 2
-python -m src.node --id 2 --nodes 3
-[PID 2] 🚀 Iniciando processo com PID 2 (total: 3)
+python -m src.node --id 2
+[PID 2] 🚀 Iniciando processo com PID 2
 [PID 2] 🔍 Enviando HELLO para descobrir líder
 [PID 2] 🔗 Conectado ao líder 1 (round 0)
 
 # Terminal 3
-python -m src.node --id 3 --nodes 3
-[PID 3] 🚀 Iniciando processo com PID 3 (total: 3)
+python -m src.node --id 3
+[PID 3] 🚀 Iniciando processo com PID 3
 [PID 3] 🔍 Enviando HELLO para descobrir líder
 [PID 3] 🔥 Sem HELLO_ACK ➜ iniciando eleição
 [PID 3] 👑 Assumiu liderança (PID maior)

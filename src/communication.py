@@ -33,7 +33,6 @@ def safe_create_socket() -> socket.socket:
         try:
             return create_socket()
         except Exception as e:
-            print(f"Erro ao criar socket: {e}. Tentando novamente em 2s...")
             time.sleep(2)
 
 def send(sock: socket.socket, data: bytes) -> bool:
@@ -51,7 +50,6 @@ def send(sock: socket.socket, data: bytes) -> bool:
         sock.sendto(data, (MULTICAST_GRP, MULTICAST_PORT))
         return True
     except Exception as e:
-        print(f"Erro no envio: {e}")
         return False
 
 def receive(sock: socket.socket, buffer_size: int = 1024) -> tuple[bytes, tuple] | None:
@@ -68,7 +66,6 @@ def receive(sock: socket.socket, buffer_size: int = 1024) -> tuple[bytes, tuple]
     try:
         return sock.recvfrom(buffer_size)
     except Exception as e:
-        print(f"Erro na recepção: {e}")
         return None
 
 class NetworkManager:

@@ -9,6 +9,7 @@ from time import monotonic, sleep
 from threading import Thread
 from .message import pack
 from .config import HEARTBEAT_INT, FAIL_TIMEOUT
+import threading
 
 def start_heartbeat(node):
     """
@@ -37,30 +38,47 @@ def start_heartbeat(node):
 def start_monitor(node):
     """
     Inicia thread de monitoramento para detecção de falhas.
-    
-    Monitora continuamente a tabela de processos vivos, removendo processos
-    que não enviaram heartbeat dentro do FAIL_TIMEOUT. Inicia eleição se
-    o líder atual for detectado como morto.
-    
-    Args:
-        node: Instância do nó que executará o monitoramento
-        
-    Note:
-        A thread é marcada como daemon para terminar automaticamente
-        quando o processo principal termina.
     """
+    # Tempo de inicialização do monitor
+    monitor_start_time = monotonic()
+    
     def monitor():
         while True:
-            now = monotonic()
-            dead = [pid for pid, ts in node.alive.items()
-                    if now - ts > FAIL_TIMEOUT]
-            for pid in dead:
-                node.alive.pop(pid, None)
-                node.log(f"Processo {pid} considerado MORTO")
-                if pid == node.leader:
-                    node.log("Líder caiu ➜ iniciando eleição")
-                    node.start_election()
-            sleep(1)
+            try:
+                now = monotonic()
+                
+                # Carência de 5 segundos após iniciar monitor
+                # (para não marcar processos como mortos durante descoberta inicial)
+                if now - monitor_start_time < 5:
+                    sleep(0.3)
+                    continue
+                
+                # Lista de processos para remover
+                to_remove = []
+                leader_died = False
+                
+                # Verifica quem está morto
+                for pid, last_seen in list(node.alive.items()):
+                    if pid != node.pid and now - last_seen > FAIL_TIMEOUT:
+                        to_remove.append(pid)
+                        if pid == node.leader:
+                            leader_died = True
+                
+                # Remove os mortos
+                for pid in to_remove:
+                    if pid in node.alive:
+                        del node.alive[pid]
+                        node.log(f"Processo {pid} considerado MORTO", "💀", "red")
+                
+                # Se líder morreu, inicia eleição
+                if leader_died:
+                    node.log("Líder caiu ➜ iniciando eleição", "🔥", "red")
+                    threading.Timer(0.1, node.start_election).start()
+                
+            except Exception as e:
+                node.log(f"Erro no monitor: {e}", "❌", "red")
+            
+            sleep(0.3)
 
     Thread(target=monitor, daemon=True).start()
 
